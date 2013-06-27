@@ -100,7 +100,7 @@ while (<FH>) {
 close (FH);
 
 
-my $filenum = 0;
+my $filenum = 1;
 my ($filehandle, $filename, $nexthopcount);
 
 NH:
@@ -122,12 +122,16 @@ foreach my $nexthop (keys %peers) {
 
 	next NH unless ($neighbor);
 
-	if (($nexthopcount % $cores) == 0) {
-		$filenum++;
-		$filename = $fileprefix . ".$filenum";
-		close ($filehandle) if ($filehandle);
-		open ($filehandle, '>>', $filename ) || die "Can't open $!";
+	if ($filenum >= $cores) {
+		$filenum = 1;
 	}
+	else {
+		$filename++;
+	}
+
+	$filename = $fileprefix . ".$filenum";
+	close ($filehandle) if ($filehandle);
+	open ($filehandle, '>>', $filename ) || die "Can't open $!";
 	print $filehandle "neighbor $neighbor {\n\trouter-id $nexthop;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tstatic {\n";
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";

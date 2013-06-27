@@ -126,7 +126,7 @@ foreach my $nexthop (keys %peers) {
 		$filenum = 1;
 	}
 	else {
-		$filename++;
+		$filenum++;
 	}
 
 	$filename = $fileprefix . ".$filenum";

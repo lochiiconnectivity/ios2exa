@@ -15,13 +15,18 @@ my ($opt, $usage) = describe_options(
 	['cores|c=i',	'number of configuration per core files to create (default 1)'		],
 	['file|f=s',	'filename containing output of IOS "show ip bgp" to parse'		],
 	['holdtime|h=i','Hold timer (default 180 seconds)'					],
+	['hintsubnets|i','Hint at which subnets can be used (overrides all other options)'	],
 	['lines|l=i',	'number of lines in the input file to parse (default=unlimited)'	],
 	['prefix|p=s',	'name to prefix output files with (default = exacfg)'			],
 	['subnets|s=s@','comma seperated subnets <hostip>/<mask> of target/DUT (mandatory)'	],
 	['help|h',	'this help'								],
 );
 
-print($usage->text), exit if ($opt->help || !( -e $opt->file ));
+if ($opt->hintsubnets && -e $opt->file) {
+}
+elsif (($opt->help) || !( -e $opt->file )) {
+	print($usage->text), exit;
+}
 
 my $as		= $opt->asnum	|| 8426;
 my $cores 	= $opt->cores 	|| 1;
@@ -29,13 +34,18 @@ my $fileprefix 	= $opt->prefix 	|| 'exacfg';
 my $holdtime	= $opt->holdtime|| 180;
 my $lines 	= $opt->lines;
 
-die "No subnets specified" unless ($opt->subnets->[0]);
-
-foreach my $subnet (@{$opt->subnets}) {
-	if ($subnet=~m/(\d+\.\d+\.\d+\.\d+\/\d+)/) {
-		my ($ip, $mask) = ($1, $2);
-		$subnets{$ip} = new Net::Netmask($subnet);
+if ($opt->subnets && $opt->subnets->[0]) {
+	foreach my $subnet (@{$opt->subnets}) {
+		if ($subnet=~m/(\d+\.\d+\.\d+\.\d+\/\d+)/) {
+			my ($ip, $mask) = ($1, $2);
+			$subnets{$ip} = new Net::Netmask($subnet);
+		}
 	}
+}
+elsif ($opt->hintsubnets) {
+}
+else {
+	die "No subnets specified\n";
 }
 
 open (FH, '<', $opt->file) || die "Can't open $!";
@@ -95,13 +105,20 @@ my ($filehandle, $filename, $nexthopcount);
 
 NH:
 foreach my $nexthop (keys %peers) {
+
+	if ($opt->hintsubnets) {
+		print "$nexthop\n";
+		next NH;
+	}
+
 	my $neighbor;
 
 	foreach my $sneighbor (keys %subnets) {
 		if ($subnets{$sneighbor}->contains($nexthop)) {
 			$neighbor = $sneighbor;
+			$neighbor =~s/\/.*//g;
 		}
-	}
+	}	
 
 	next NH unless ($neighbor);
 
@@ -118,7 +135,7 @@ foreach my $nexthop (keys %peers) {
 	print $filehandle "\t}\n";
 	$nexthopcount++;	
 }
-close ($filehandle);
+close ($filehandle) if ($filehandle);
 exit;
 
 sub maskify { 

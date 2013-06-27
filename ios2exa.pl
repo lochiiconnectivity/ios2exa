@@ -122,7 +122,7 @@ foreach my $nexthop (keys %peers) {
 
 	next NH unless ($neighbor);
 
-	if ($filenum >= $cores) {
+	if ($filenum >= ($cores-1)) {
 		$filenum = 1;
 	}
 	else {

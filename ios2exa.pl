@@ -139,7 +139,7 @@ foreach my $nexthop (keys %peers) {
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";
 	}
-	print $filehandle "\t}\n";
+	print $filehandle "\t}\n}\n";
 	$nexthopcount++;	
 }
 close ($filehandle) if ($filehandle);

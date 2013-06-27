@@ -101,7 +101,9 @@ close (FH);
 
 
 my $filenum = 1;
-my ($filehandle, $filename, $nexthopcount);
+my ($confighandle, $filehandle, $filename, $nexthopcount);
+
+open ($confighandle, '>>', "$fileprefix.config");
 
 NH:
 foreach my $nexthop (keys %peers) {
@@ -132,6 +134,7 @@ foreach my $nexthop (keys %peers) {
 	$filename = $fileprefix . ".$filenum";
 	close ($filehandle) if ($filehandle);
 	open ($filehandle, '>>', $filename ) || die "Can't open $!";
+	print $confighandle "router bgp $as neighbor $nexthop remote-as $peers{$nexthop}{'as'}\nrouter bgp $as neighbor $nexthop address-family ipv4 unicast\nexit\n";
 	print $filehandle "neighbor $neighbor {\n\trouter-id $nexthop;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tstatic {\n";
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";
@@ -140,6 +143,7 @@ foreach my $nexthop (keys %peers) {
 	$nexthopcount++;	
 }
 close ($filehandle) if ($filehandle);
+close ($confighandle) if ($confighandle);
 exit;
 
 sub maskify { 

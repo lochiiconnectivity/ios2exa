@@ -87,40 +87,45 @@ while (<FH>) {
 		print "G. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
 	}
-	elsif ($_=~m/(\d+\.\d+\.\d+\.\d+\/\d+|[0-9a-fA-F:]{5,}\/\d+)$/) {
+	elsif ($_=~m/^[\*>]+\s+([0-9a-fA-F:\/]{5,})\s+([0-9a-fA-F:]{5,})/) {
 		$matched = 'H';
-		print "H. P=$1\n" if ($opt->debug);
+		print "H. P=$1, N=$2\n" if ($opt->debug);
+		($prefix, $nexthop) = ($1, $2);
+	}
+	elsif ($_=~m/(\d+\.\d+\.\d+\.\d+\/\d+|[0-9a-fA-F:]{5,}\/\d+)$/) {
+		$matched = 'I';
+		print "I. P=$1\n" if ($opt->debug);
 		$prefix = $1;
 		$nexthop = undef;
 	}
-	elsif ($_=~m/\s+([0-9a-fA-F:]{5,})$/) {
-		$matched = 'I';
-		print "I. N=$1\n" if ($opt->debug);
+	elsif ($_=~m/^[\*> ]*([0-9a-fA-F:]{5,})$/) {
+		$matched = 'J';
+		print "J. N=$1\n" if ($opt->debug);
 		$nexthop = $1;
 	}
 	elsif ($_=~m/^([>i]*)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
-		$matched = 'J';
-		print "J. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
-		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
-	}
-	elsif ($_=~m/^\*( i)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
 		$matched = 'K';
 		print "K. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
 	}
-	elsif ($_=~m/^\s+([0-9a-fA-F:]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+	elsif ($_=~m/^\*( i)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
 		$matched = 'L';
-		print "L. N=$1, M=$2, L=$3, W=$4, P=$5\n" if ($opt->debug);
+		print "L. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
+		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
+	}
+	elsif ($_=~m/^\s+([0-9a-fA-F:]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+		$matched = 'M';
+		print "M. N=$1, M=$2, L=$3, W=$4, P=$5\n" if ($opt->debug);
 		($nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5);
 	}
 	elsif ($_=~m/^\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
-		$matched = 'M';
-		print "M. M=$1, L=$2, W=$3, P=$4\n" if ($opt->debug);
+		$matched = 'N';
+		print "N. M=$1, L=$2, W=$3, P=$4\n" if ($opt->debug);
 		($metric, $localpref, $weight, $path) = ($1, $2, $3, $4);
 	}
 	elsif ($_=~m/^\s+\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
-		$matched = 'N';
-		print "N. L=$1, W=$2, P=$3\n" if ($opt->debug);
+		$matched = 'O';
+		print "O. L=$1, W=$2, P=$3\n" if ($opt->debug);
 		($localpref, $weight, $path) = ($1, $2, $3, $4);
 	}
 	elsif ($_=~m/h|r|\*d /) {
@@ -134,7 +139,7 @@ while (<FH>) {
 	next unless ($nexthop);
 	next unless ($path);
 	
-	next if ($nexthop eq '80.168.0.25' || $nexthop eq '80.168.0.55' || $nexthop eq '10.255.255.10');
+	next if ($nexthop eq '80.168.0.25' || $nexthop eq '80.168.0.55' || $nexthop eq '10.255.255.10' || $nexthop eq '2001:A88::2C' || $nexthop eq '2001:A88::C' || $nexthop =~m/^100:/);
 
 	next if ($path=~m/^\s+0\s/ || $path eq 'i');
 

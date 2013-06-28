@@ -4,15 +4,16 @@
 
 use strict;
 use Getopt::Long::Descriptive;
-use Net::Netmask;
+use Net::Subnet;
 
 my (%subnets, %peers);
-my ($linecount, $prefix);
+my ($linecount, $prefix, $nexthop);
 
 my ($opt, $usage) = describe_options(
 	"$0 <arguments>",
 	['asnum|a=i',	'AS Number of target / DUT (default 8426)'				],
 	['cores|c=i',	'number of configuration per core files to create (default 1)'		],
+	['debug|d',	'Debug mode'								],
 	['file|f=s',	'filename containing output of IOS "show ip bgp" to parse'		],
 	['holdtime|h=i','Hold timer (default 180 seconds)'					],
 	['hintsubnets|i','Hint at which subnets can be used (overrides all other options)'	],
@@ -36,10 +37,7 @@ my $lines 	= $opt->lines;
 
 if ($opt->subnets && $opt->subnets->[0]) {
 	foreach my $subnet (@{$opt->subnets}) {
-		if ($subnet=~m/(\d+\.\d+\.\d+\.\d+\/\d+)/) {
-			my ($ip, $mask) = ($1, $2);
-			$subnets{$ip} = new Net::Netmask($subnet);
-		}
+		$subnets{$subnet} = $subnet;
 	}
 }
 elsif ($opt->hintsubnets) {
@@ -53,36 +51,95 @@ while (<FH>) {
 	last if ($opt->lines && $linecount>=$opt->lines);
 	chop;
 	chop;
-	my ($flags, $nexthop, $metric, $localpref, $weight, $path);
-	if ($_=~m/^\*([>i]*)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	my ($matched, $flags, $metric, $localpref, $weight, $path);
+	if ($_=~m/^\*([>i]*)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'A';
+		print "A. F=$1, P=$2, N=$3, M=$4, L=$5, W=$6, P=$7\n" if ($opt->debug);
 		($flags, $prefix, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6, $7);
 	}
-	elsif ($_=~m/^\*([>i]*)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s{1,}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*([>i]*)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'B';
+		print "B. F=$1, P=$2, N=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $prefix, $nexthop, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
 	}
-	elsif ($_=~m/^\*([>i]*)\s+(\d+\.\d+\.\d+\.\d+)\s{1,15}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*([>i]*)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,15}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'C';
+		print "C. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
 	}
-	elsif ($_=~m/^\*([>i]*)\s+(\d+\.\d+\.\d+\.\d+)\s{1,18}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*([>i]*)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,18}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'D';
+		print "D. F=$1, N=$2, L=$3, W=$4, P=$5\n" if ($opt->debug);
 		($flags, $nexthop, $localpref, $weight, $path) = ($1, $2, $3, $4, $5);
 	}
-	elsif ($_=~m/^\*( i)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*( i)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'E';
+		print "E. F=$1, P=$2, N=$3, M=$4, L=$5, W=$6, P=$7\n" if ($opt->debug);
 		($flags, $prefix, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6, $7);
 	}
-	elsif ($_=~m/^\*( i)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s{1,}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*( i)\s{0,2}(\d+\.\d+\.\d+\.\d+\/\d+|\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'F';
+		print "F. F=$1, P=$2, N=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $prefix, $nexthop, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
 	}
-	elsif ($_=~m/^\*( i)\s+(\d+\.\d+\.\d+\.\d+)\s{1,15}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s]+)/) {
+	elsif ($_=~m/^\*( i)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,15}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'G';
+		print "G. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
 		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
+	}
+	elsif ($_=~m/(\d+\.\d+\.\d+\.\d+\/\d+|[0-9a-fA-F:]{5,}\/\d+)$/) {
+		$matched = 'H';
+		print "H. P=$1\n" if ($opt->debug);
+		$prefix = $1;
+		$nexthop = undef;
+	}
+	elsif ($_=~m/\s+([0-9a-fA-F:]{5,})$/) {
+		$matched = 'I';
+		print "I. N=$1\n" if ($opt->debug);
+		$nexthop = $1;
+	}
+	elsif ($_=~m/^([>i]*)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s{1,14}(\d+)\s{4}(\d+)\s{1,}(\d+)\s{1}([0-9\(\)i\s\?]+)/) {
+		$matched = 'J';
+		print "J. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
+		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
+	}
+	elsif ($_=~m/^\*( i)\s+(\d+\.\d+\.\d+\.\d+|[0-9a-fA-F:\/]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+		$matched = 'K';
+		print "K. F=$1, N=$2, M=$3, L=$4, W=$5, P=$6\n" if ($opt->debug);
+		($flags, $nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5, $6);
+	}
+	elsif ($_=~m/^\s+([0-9a-fA-F:]{5,})\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+		$matched = 'L';
+		print "L. N=$1, M=$2, L=$3, W=$4, P=$5\n" if ($opt->debug);
+		($nexthop, $metric, $localpref, $weight, $path) = ($1, $2, $3, $4, $5);
+	}
+	elsif ($_=~m/^\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+		$matched = 'M';
+		print "M. M=$1, L=$2, W=$3, P=$4\n" if ($opt->debug);
+		($metric, $localpref, $weight, $path) = ($1, $2, $3, $4);
+	}
+	elsif ($_=~m/^\s+\s+(\d+)\s+(\d+)\s+([0-9\(\)i\s\?]+)/) {
+		$matched = 'N';
+		print "N. L=$1, W=$2, P=$3\n" if ($opt->debug);
+		($localpref, $weight, $path) = ($1, $2, $3, $4);
+	}
+	elsif ($_=~m/h|r|\*d /) {
+		$matched = 'HRD';
+	}
+	else {
+		$matched = 'U';
+		print "U. Unknown (line = $_)\n" if ($opt->debug);
 	}
 
 	next unless ($nexthop);
+	next unless ($path);
 	
 	next if ($nexthop eq '80.168.0.25' || $nexthop eq '80.168.0.55' || $nexthop eq '10.255.255.10');
 
 	next if ($path=~m/^\s+0\s/ || $path eq 'i');
 
 	$path=~s/\(|\)| i//g;
+	$path=~s/\?//g;
 
 	if (!$peers{$nexthop}{'as'} && $path=~m/^(\d+)\s*/) {
 		$peers{$nexthop}{'as'} = $1;
@@ -116,7 +173,7 @@ foreach my $nexthop (keys %peers) {
 	my $neighbor;
 
 	foreach my $sneighbor (keys %subnets) {
-		if ($subnets{$sneighbor}->contains($nexthop)) {
+		if (subnet_matcher($subnets{$sneighbor})->(($nexthop))) {
 			$neighbor = $sneighbor;
 			$neighbor =~s/\/.*//g;
 		}

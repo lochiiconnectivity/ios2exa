@@ -170,6 +170,10 @@ open ($confighandle, '>>', "$fileprefix.config");
 NH:
 foreach my $nexthop (keys %peers) {
 
+	my $rid = ($nexthop=~m/:/) ? '0.0.0.1' : $nexthop;
+	my $family = ($nexthop=~m/:/) ? 'ipv6 unicast' : 'ipv4 unicast';
+	my $efamily = ($nexthop=~m/:/) ? 'inet6 unicast' : 'inet4 unicast';
+
 	if ($opt->hintsubnets) {
 		print "$nexthop\n";
 		next NH;
@@ -196,8 +200,8 @@ foreach my $nexthop (keys %peers) {
 	$filename = $fileprefix . ".$filenum";
 	close ($filehandle) if ($filehandle);
 	open ($filehandle, '>>', $filename ) || die "Can't open $!";
-	print $confighandle "router bgp $as neighbor $nexthop remote-as $peers{$nexthop}{'as'}\nrouter bgp $as neighbor $nexthop address-family ipv4 unicast\nexit\n";
-	print $filehandle "neighbor $neighbor {\n\trouter-id $nexthop;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tstatic {\n";
+	print $confighandle "router bgp $as neighbor $nexthop remote-as $peers{$nexthop}{'as'}\nrouter bgp $as neighbor $nexthop address-family $family\nexit\n";
+	print $filehandle "neighbor $neighbor {\n\trouter-id $rid;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tfamily {$efamily;}\n\tstatic {\n";
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";
 	}

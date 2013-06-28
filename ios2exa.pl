@@ -201,7 +201,7 @@ foreach my $nexthop (keys %peers) {
 	close ($filehandle) if ($filehandle);
 	open ($filehandle, '>>', $filename ) || die "Can't open $!";
 	print $confighandle "router bgp $as neighbor $nexthop remote-as $peers{$nexthop}{'as'}\nrouter bgp $as neighbor $nexthop address-family $family\nexit\n";
-	print $filehandle "neighbor $neighbor {\n\trouter-id $rid;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tfamily {$efamily;}\n\tstatic {\n";
+	print $filehandle "neighbor $neighbor {\n\trouter-id $rid;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tfamily {\n\t\t$efamily;\t\n}\n\tstatic {\n";
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";
 	}

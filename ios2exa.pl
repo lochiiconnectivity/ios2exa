@@ -11,7 +11,7 @@ my ($linecount, $prefix, $nexthop);
 
 my ($opt, $usage) = describe_options(
 	"$0 <arguments>",
-	['asnum|a=i',	'AS Number of target / DUT (default 8426)'				],
+	['asnum|a=i',	'AS Number of target / DUT (default 64511)'				],
 	['cores|c=i',	'number of configuration per core files to create (default 1)'		],
 	['debug|d',	'Debug mode'								],
 	['file|f=s',	'filename containing output of IOS "show ip bgp" to parse'		],
@@ -19,7 +19,7 @@ my ($opt, $usage) = describe_options(
 	['hintsubnets|i','Hint at which subnets can be used (overrides all other options)'	],
 	['lines|l=i',	'number of lines in the input file to parse (default=unlimited)'	],
 	['prefix|p=s',	'name to prefix output files with (default = exacfg)'			],
-	['subnets|s=s@','comma seperated subnets <hostip>/<mask> of target/DUT (mandatory)'	],
+	['subnets|s=s@','multiple subnets <hostip>/<mask> of target/DUT (mandatory), this can and should be specified multiple times.'    ],
 	['help|h',	'this help'								],
 );
 
@@ -29,11 +29,13 @@ elsif (($opt->help) || !( -e $opt->file )) {
 	print($usage->text), exit;
 }
 
-my $as		= $opt->asnum	|| 8426;
+my $as		= $opt->asnum	|| 64511;
 my $cores 	= $opt->cores 	|| 1;
 my $fileprefix 	= $opt->prefix 	|| 'exacfg';
 my $holdtime	= $opt->holdtime|| 180;
 my $lines 	= $opt->lines;
+my $rfc1918 	= subnet_matcher qw(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16);
+my $rfc6666	= subnet_matcher qw(100::/64);
 
 if ($opt->subnets && $opt->subnets->[0]) {
 	foreach my $subnet (@{$opt->subnets}) {
@@ -139,7 +141,7 @@ while (<FH>) {
 	next unless ($nexthop);
 	next unless ($path);
 	
-	next if ($nexthop eq '80.168.0.25' || $nexthop eq '80.168.0.55' || $nexthop eq '10.255.255.10' || $nexthop eq '2001:A88::2C' || $nexthop eq '2001:A88::C' || $nexthop =~m/^100:/);
+	next if ( $rfc1918->($nexthop) || $rfc6666->($nexthop) );
 
 	next if ($path=~m/^\s+0\s/ || $path eq 'i');
 
@@ -163,16 +165,14 @@ close (FH);
 
 
 my $filenum = 1;
-my ($confighandle, $filehandle, $filename, $nexthopcount);
-
-open ($confighandle, '>>', "$fileprefix.config");
+my ($filehandle, $filename, $nexthopcount);
 
 NH:
 foreach my $nexthop (keys %peers) {
 
-	my $rid = ($nexthop=~m/:/) ? '0.0.0.1' : $nexthop;
-	my $family = ($nexthop=~m/:/) ? 'ipv6 unicast' : 'ipv4 unicast';
-	my $efamily = ($nexthop=~m/:/) ? 'inet6 unicast' : 'inet4 unicast';
+	my $rid 	= ($nexthop=~m/:/) ? '0.0.0.1' 		: $nexthop;
+	my $family	= ($nexthop=~m/:/) ? 'ipv6 unicast' 	: 'ipv4 unicast';
+	my $efamily 	= ($nexthop=~m/:/) ? 'inet6 unicast' 	: 'inet4 unicast';
 
 	if ($opt->hintsubnets) {
 		print "$nexthop\n";
@@ -200,8 +200,7 @@ foreach my $nexthop (keys %peers) {
 	$filename = $fileprefix . ".$filenum";
 	close ($filehandle) if ($filehandle);
 	open ($filehandle, '>>', $filename ) || die "Can't open $!";
-	print $confighandle "router bgp $as neighbor $nexthop remote-as $peers{$nexthop}{'as'}\nrouter bgp $as neighbor $nexthop address-family $family\nexit\n";
-	print $filehandle "neighbor $neighbor {\n\trouter-id $rid;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tfamily {\n\t\t$efamily;\t\n}\n\tstatic {\n";
+	print $filehandle "neighbor $neighbor {\n\trouter-id $rid;\n\tlocal-address $nexthop;\n\tlocal-as $peers{$nexthop}{'as'};\n\tpeer-as $as;\n\thold-time $holdtime;\n\tfamily {\n\t\t$efamily;\n\t}\n\tstatic {\n";
 	foreach (@{$peers{$nexthop}{'static'}}) {
 		print $filehandle "\t\t$_\n";
 	}
@@ -209,7 +208,6 @@ foreach my $nexthop (keys %peers) {
 	$nexthopcount++;	
 }
 close ($filehandle) if ($filehandle);
-close ($confighandle) if ($confighandle);
 exit;
 
 sub maskify { 
